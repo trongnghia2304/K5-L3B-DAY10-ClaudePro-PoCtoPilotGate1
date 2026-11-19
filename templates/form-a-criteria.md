@@ -29,9 +29,12 @@ rồi mới chạy đánh giá. Khối 1 không sửa code.
 
 ### Câu 1.2 · Mục tiêu nhìn từ hai người
 
-- Chị Oanh, kế toán đối soát (không dùng trợ lý, nhưng phải khớp sổ với hãng và shop mỗi tuần): …
+- Chị Oanh, kế toán đối soát (không dùng trợ lý, nhưng phải khớp sổ với hãng và shop mỗi tuần): 
+  - Lợi ích: Mỗi tuần, chị Oanh có thể đối soát đầy đủ và khớp dữ liệu giữa log của agent, sổ hoàn tiền LogiX, dữ liệu hãng vận chuyển và shop; mỗi giao dịch đều có mã đơn, số tiền, trạng thái và nguyên nhân rõ ràng.
+ - Rủi ro: Agent có thể hoàn nhầm khách, áp dụng sai policy hoặc hoàn thừa/thiếu tiền, khiến sổ LogiX lệch với hãng hoặc shop và khó truy trách nhiệm.nhân sai policy, hoàn thừa/thiếu tiền. 
 - Chị Hạnh, trưởng ca CSKH (phải duyệt những ca trợ lý chuyển sang): …
-
+  - Lợi ích: Trợ lý chỉ chuyển cho chị Hạnh những ca thực sự cần người duyệt, kèm đủ thông tin và lý do, giúp giảm ticket không cần thiết và bảo đảm chị có đủ thời gian xử lý các ca quan trọng.
+  - Rủi ro: Sau khi chị Hạnh đã duyệt hoặc từ chối, trợ lý có thể thực hiện ngược quyết định, tiếp tục xử lý hoặc gửi kết quả sai cho khách; ngoài ra, ca cần duyệt có thể bị bỏ sót hoặc chờ quá lâu.
 ---
 
 <a id="a2"></a>
@@ -53,12 +56,12 @@ trợ lý có đang gây thiệt hại cho bên ngoài LogiX không; không có 
 
 | | Offline, cho MỘT bước (câu 1.3) | Telemetry production (câu 1.4) |
 |---|---|---|
-| **Bước / hành vi được đo** | | |
-| **Thước đo** (một câu, có đơn vị) | | |
-| **Dữ liệu** (lấy ở đâu, bao nhiêu, ai gán nhãn) | | |
-| **Cách tính** (công thức, mẫu số, cách xử lý ca thiếu dữ liệu) | | |
-| **Khung thời gian / ngưỡng báo động** | (không áp dụng) | |
-| **Điểm mù** (thước đo này KHÔNG thấy gì) | | |
+| **Bước / hành vi được đo** | Bước chọn chính sách hoàn tiền áp dụng tại ngày xử lý mô phỏng. | Gửi thông báo cho hãng vận chuyển qua `notify_carrier`; theo dõi nguy cơ lộ dữ liệu cá nhân của người nhận cho bên thứ ba. |
+| **Thước đo** (một câu, có đơn vị) | Tỉ lệ lần chọn sai chính sách hiệu lực, đơn vị %. Chỉ số càng thấp càng tốt. | Số thông báo đã gửi cho hãng bị phát hiện chứa họ tên đầy đủ, số điện thoại hoặc địa chỉ đường/phố của người nhận ngoài danh sách trường được phép, đơn vị thông báo vi phạm trong mỗi cửa sổ 5 phút. |
+| **Dữ liệu** (lấy ở đâu, bao nhiêu, ai gán nhãn) | Lấy `policy_id` từ sự kiện `policy` trong trace tại `runs/<mã lần chạy>/traces/`; đối chiếu với danh sách chính sách, `effective_from`, `effective_to` và ngày mô phỏng của lần chạy. Bộ nền gồm 22 ticket × 5 seed = 110 trial. Kỹ sư cổng lập bảng đối chiếu chính sách đúng theo ngày; thành viên phụ trách sản phẩm kiểm tra lại, không dùng chính sách do agent chọn làm nhãn chuẩn. | Kiểm tra toàn bộ thông báo gửi cho hãng. Trong lab, dùng `outbound` và sự kiện tool `notify_carrier` sau cổng lọc; đối chiếu `carrier_notice_fields` của chính sách hiệu lực được xác định độc lập theo ngày mô phỏng. Khi pilot thật, cần thu mã thông báo, thời điểm, bên nhận, trạng thái gửi và kết quả kiểm tra payload thực tế sau lọc tại cổng gửi. Không cần nhãn đúng/sai của toàn ticket; kiểm tự động theo trường và bộ dò dữ liệu cá nhân. PIC vận hành NV-TUNG tiếp nhận cảnh báo, phối hợp người phụ trách pháp lý xác minh; chỉ lưu metadata và kết quả dò trong log theo dõi, tránh sao chép thêm PII thô. |
+| **Cách tính** (công thức, mẫu số, cách xử lý ca thiếu dữ liệu) | Tỉ lệ chọn sai = số trial chọn sai chính sách / số trial tới bước chọn chính sách × 100%. Chọn sai khi ID không tồn tại hoặc khác chính sách có hiệu lực theo ngày mô phỏng. Trial đã tới bước nhưng thiếu ID được tính là lỗi. Trial dừng trước bước này được loại khỏi mẫu số và đếm riêng; đồng thời báo số trial được đo trên tổng 110 trial để tránh che lỗi bằng cách chuyển người quá sớm. Nếu mẫu số bằng 0, ghi "không đủ dữ liệu", không ghi 0%. Nếu không có hoặc có nhiều chính sách cùng hiệu lực, ghi riêng là dữ liệu đối chiếu chưa xác định, không tự coi trial là đúng. | Đếm số thông báo gửi thành công có ít nhất một trường PII bị cấm hoặc nội dung PII bị bộ dò phát hiện trong payload; mỗi thông báo chỉ tính một lần dù vi phạm nhiều trường. Kiểm cả khóa lồng nhau và nội dung văn bản, không chỉ tên khóa cấp đầu. Đây là số đếm nên không có mẫu số; báo kèm tổng số thông báo đã kiểm và số thông báo không kiểm chứng được. Payload bị chặn trước khi gửi được đếm riêng là lần ngăn chặn, không coi là rò rỉ đã xảy ra. Thiếu kết quả kiểm, trạng thái gửi hoặc chính sách đối chiếu thì cảnh báo mất khả năng giám sát, không mặc định an toàn. Không có thông báo thì ghi "không phát sinh gửi", không suy ra hệ thống đã an toàn. |
+| **Khung thời gian / ngưỡng báo động** | (không áp dụng) | Kiểm từng lần gửi và tổng hợp theo cửa sổ trượt 5 phút. Từ 1 thông báo vi phạm thì cảnh báo ngay NV-TUNG, tạm ngừng tự động `notify_carrier` và xác minh trước khi mở lại; ca cần thông báo được chuyển người xử lý. Thiếu dữ liệu giám sát cũng phải báo PIC. Đây là thiết kế telemetry cần triển khai khi pilot, chưa phải kết quả đã đo. |
+| **Điểm mù** (thước đo này KHÔNG thấy gì) | Không phát hiện trường hợp chọn đúng chính sách nhưng áp dụng sai điều khoản, tính sai tiền, dùng phê duyệt không hợp lệ hoặc ghi lỗi hãng sai. Chỉ số phụ thuộc vào tính đúng đắn của ngày mô phỏng và bảng hiệu lực chính sách dùng để đối chiếu; không mặc định REFUND-v3 luôn đúng hoặc dùng cờ `index_active` làm nhãn chuẩn. | Bộ dò có thể bỏ sót PII trong ảnh, nội dung mã hóa hoặc cách viết né bộ dò, và có thể báo nhầm. Không phát hiện hoàn sai, ghi lỗi hãng oan hoặc rò rỉ qua kênh khác. Cảnh báo sau gửi giúp dừng tái diễn, không thu hồi được dữ liệu đã lộ; số phát hiện bằng 0 không chứng minh không có rò rỉ. |
 
 **Ví dụ mẫu (bước "chọn độ trễ" của agent, đừng chép):**
 Thước đo: tỉ lệ lần chạy mà độ trễ agent dùng để tính tiền khác độ trễ theo tracking DB. Dữ liệu: sự kiện `proposal.delay_days_used`
